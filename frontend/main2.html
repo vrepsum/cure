@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CURE | Autonomous Diagnostics</title>
+    <style>
+        :root {
+            --bg: #080808;
+            --fg: #e0e0e0;
+            --accent: #ccff00; /* Bio-Lumine Green */
+            --grid: rgba(204, 255, 0, 0.15);
+            --font-display: 'Helvetica Neue', sans-serif;
+            --font-mono: 'Courier New', monospace;
+        }
+
+        * { box-sizing: border-box; cursor: none; } 
+
+        body, html { 
+            margin: 0; padding: 0; 
+            width: 100%; 
+            overflow-x: hidden; 
+            background: var(--bg); 
+            color: var(--fg);
+        }
+
+        /* --- CUSTOM CURSOR --- */
+        #cursor {
+            position: fixed; top: 0; left: 0; width: 20px; height: 20px;
+            border: 1px solid var(--accent); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 9999;
+            mix-blend-mode: difference; transition: width 0.2s, height 0.2s;
+        }
+        #cursor-dot {
+            position: fixed; top: 0; left: 0; width: 4px; height: 4px;
+            background: var(--accent); transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 9999;
+        }
+
+        /* --- CANVAS --- */
+        #gl-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+        }
+
+        /* --- LAYOUT --- */
+        main { position: relative; z-index: 10; }
+        section { min-height: 100vh; position: relative; width: 100%; }
+
+        /* --- HERO UI --- */
+        .hero-layer {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: 100px 1fr 100px;
+            padding: 2rem;
+            pointer-events: none; 
+        }
+
+        .corner { display: flex; flex-direction: column; justify-content: center; }
+        .top-left { align-items: flex-start; border-left: 1px solid var(--grid); padding-left: 20px; }
+        .top-right { align-items: flex-end; border-right: 1px solid var(--grid); padding-right: 20px; }
+        .bottom-left { justify-content: flex-end; border-left: 1px solid var(--grid); padding-left: 20px; padding-bottom: 20px; }
+        .bottom-right { justify-content: flex-end; align-items: flex-end; border-right: 1px solid var(--grid); padding-right: 20px; padding-bottom: 20px; }
+
+        /* --- FIXED TEXT ANIMATION --- */
+        h1 {
+            font-family: var(--font-display); font-weight: 700; font-size: 5rem;
+            line-height: 0.8; margin: 0; letter-spacing: -0.04em; text-transform: uppercase;
+        }
+
+        .scanner-text {
+            /* 1. Make text see-through so background shows */
+            color: transparent;
+            
+            /* 2. Add the Wireframe Outline */
+            -webkit-text-stroke: 1px var(--fg);
+            
+            /* 3. Create the Gradient: Left half is Green, Right half is Transparent */
+            background-image: linear-gradient(to right, var(--accent) 50%, transparent 50%);
+            
+            /* 4. Make background 200% wide so we can slide it */
+            background-size: 200% 100%;
+            
+            /* 5. Start position: Show the transparent right half */
+            background-position: 100% 0;
+            
+            /* 6. Clip background to text shape */
+            -webkit-background-clip: text;
+            background-clip: text;
+            
+            /* 7. Setup Animation */
+            transition: background-position 0.8s cubic-bezier(0.19, 1, 0.22, 1), -webkit-text-stroke 0.8s;
+            
+            /* 8. Enable interaction */
+            pointer-events: auto;
+            display: inline-block;
+        }
+
+        .scanner-text:hover {
+            /* Slide to the Green left half */
+            background-position: 0% 0;
+            /* Change outline to green to match fill */
+            -webkit-text-stroke: 1px var(--accent);
+        }
+
+        .mono {
+            font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase;
+            letter-spacing: 0.1em; color: var(--accent); margin-bottom: 10px;
+        }
+        .label { font-family: var(--font-mono); font-size: 0.8rem; opacity: 0.6; }
+
+        .data-column {
+            font-family: var(--font-mono); font-size: 0.6rem; line-height: 1.4;
+            color: rgba(255,255,255,0.3); position: absolute; top: 50%; transform: translateY(-50%);
+        }
+        .data-left { left: 2rem; text-align: left; }
+        .data-right { right: 2rem; text-align: right; }
+
+        .cta-container { pointer-events: auto; margin-top: 20px; }
+        .btn {
+            background: rgba(0,0,0,0.5); border: 1px solid var(--accent); color: var(--accent);
+            padding: 1rem 2rem; font-family: var(--font-mono); font-size: 0.9rem;
+            text-transform: uppercase; transition: 0.3s cubic-bezier(0.215, 0.610, 0.355, 1.000);
+            display: inline-flex; align-items: center; gap: 10px;
+        }
+        .btn:hover { background: var(--accent); color: var(--bg); padding-right: 3rem; }
+
+        /* --- DASHBOARD SECTION --- */
+        .dashboard-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .dashboard-content {
+            opacity: 0;
+            transform: translateY(50px);
+            pointer-events: auto;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+        }
+
+        .scroll-hint {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent);
+            animation: bounce 2s infinite;
+        }
+
+        /* --- MAGNETIC BUTTON STYLES --- */
+        .magnetic-wrap {
+            display: inline-block;
+            position: relative;
+            z-index: 50;
+            pointer-events: auto;
+            margin-top: 2rem;
+        }
+        .super-btn {
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+            width: 220px; height: 220px;
+            border: 1px solid var(--grid);
+            border-radius: 50%;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(5px);
+            text-decoration: none;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+        .btn-text {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            z-index: 2;
+            text-align: center;
+            text-transform: uppercase;
+            color: var(--accent);
+            transition: color 0.3s;
+        }
+        .btn-fill {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--accent);
+            border-radius: 50%;
+            transform: scale(0);
+            transform-origin: center;
+            transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+            z-index: 1;
+        }
+        .super-btn:hover { border-color: var(--accent); }
+        .super-btn:hover .btn-fill { transform: scale(1); }
+        .super-btn:hover .btn-text { color: var(--bg); }
+
+        /* --- OVERLAYS --- */
+        .scan-line {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(204, 255, 0, 0.02) 50%, transparent 51%);
+            background-size: 100% 4px; pointer-events: none; z-index: 20;
+        }
+        .vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, black 120%);
+            pointer-events: none; z-index: 5;
+        }
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateX(-50%) translateY(0);}
+            40% {transform: translateX(-50%) translateY(-10px);}
+            60% {transform: translateX(-50%) translateY(-5px);}
+        }
+
+        @media (max-width: 768px) {
+            .hero-layer { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; padding: 1rem; }
+            h1 { font-size: 3rem; }
+            .data-column { display: none; }
+            .top-right { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gl-canvas"></canvas>
+    
+    <div class="scan-line"></div>
+    <div class="vignette"></div>
+    <div id="cursor"></div>
+    <div id="cursor-dot"></div>
+
+    <main>
+        <section class="hero-section">
+            <div class="hero-layer">
+                <div class="corner top-left">
+                    <div class="mono">CURE INC. [V.4.0]</div>
+                    <div class="label">Global Diagnostic Network</div>
+                </div>
+
+                <div class="corner top-right">
+                    <div class="mono" id="time-display">00:00:00 UTC</div>
+                    <div class="label">Encryption: AES-256</div>
+                </div>
+
+                <div class="data-column data-left" id="data-stream-1"></div>
+                <div class="data-column data-right" id="data-stream-2"></div>
+
+                <div class="corner bottom-left" style="grid-column: span 2;">
+                    <h1 id="hero-title" class="scanner-text">RISK EVALUATION<br>ENGINE</h1>
+                    <div class="cta-container">
+                        <button class="btn">Start Analysis <span>+</span></button>
+                    </div>
+                </div>
+
+                <div class="corner bottom-right">
+                    <div class="mono" style="font-size: 1.5rem;">99.94%</div>
+                    <div class="label">Accuracy Metric</div>
+                    <div style="width: 100px; height: 2px; background: #333; margin-top: 10px;">
+                        <div style="width: 80%; height: 100%; background: var(--accent);"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="scroll-hint">SCROLL TO ACCESS DASHBOARD ↓</div>
+        </section>
+
+        <section class="dashboard-section">
+            <div class="dashboard-content">
+                <div class="mono">/// RESTRICTED AREA ///</div>
+                <h2 style="font-family: var(--font-display); font-size: 3rem; margin: 20px 0;">RESULTS READY</h2>
+                <p style="font-family: var(--font-mono); max-width: 400px; margin: 0 auto 10px; opacity: 0.7;">
+                    Analysis complete. 4,029 biological markers processed. 
+                    No critical anomalies detected in Sector 7.
+                </p>
+                
+                <div class="magnetic-wrap">
+                    <a href="#" class="super-btn" onclick="goToDashboard(event)">
+                        <span class="btn-text">GO TO<br>DASHBOARD</span>
+                        <div class="btn-fill"></div>
+                    </a>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+
+        // --- TRANSITION LOGIC ---
+        function goToDashboard(e) {
+            e.preventDefault();
+            
+            // Animate the green fill to expand over the whole screen
+            const fill = document.querySelector('.btn-fill');
+            const text = document.querySelector('.btn-text');
+
+            // Hide text immediately
+            gsap.to(text, {opacity: 0, duration: 0.2});
+
+            // Expand Fill
+            gsap.to(fill, {
+                scale: 50, // Massive expansion
+                duration: 0.8,
+                ease: "power2.in",
+                onComplete: () => {
+                    // Navigate to new page
+                    window.location.href = 'dashboard.html';
+                }
+            });
+        }
+
+        // --- UI LOGIC ---
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time-display').innerText = now.toISOString().split('T')[1].split('.')[0] + " UTC";
+        }
+        setInterval(updateTime, 1000);
+
+        function generateHexStream(length) {
+            let result = '';
+            const chars = 'ABCDEF0123456789';
+            for (let i = 0; i < length; i++) {
+                result += '0x' + chars[Math.floor(Math.random() * chars.length)] + ' ' + chars[Math.floor(Math.random() * chars.length)] + '<br>';
+            }
+            return result;
+        }
+        document.getElementById('data-stream-1').innerHTML = generateHexStream(15);
+        document.getElementById('data-stream-2').innerHTML = generateHexStream(15);
+        setInterval(() => {
+            document.getElementById('data-stream-1').innerHTML = generateHexStream(15);
+        }, 200);
+
+        // --- CURSOR & BUTTON LOGIC ---
+        const cursor = document.getElementById('cursor');
+        const cursorDot = document.getElementById('cursor-dot');
+        
+        window.addEventListener('mousemove', (e) => {
+            cursorDot.style.left = e.clientX + 'px';
+            cursorDot.style.top = e.clientY + 'px';
+            gsap.to(cursor, { duration: 0.3, left: e.clientX, top: e.clientY, ease: "power2.out" });
+        });
+
+        // Magnetic Button Interaction
+        const magWrap = document.querySelector('.magnetic-wrap');
+        const magBtn = document.querySelector('.super-btn');
+        
+        magWrap.addEventListener('mousemove', (e) => {
+            const rect = magWrap.getBoundingClientRect();
+            const x = e.clientX - rect.left - rect.width / 2;
+            const y = e.clientY - rect.top - rect.height / 2;
+            // Move button slightly towards mouse
+            gsap.to(magBtn, { x: x * 0.3, y: y * 0.3, duration: 0.3, ease: "power2.out" });
+        });
+
+        magWrap.addEventListener('mouseleave', () => {
+            // Snap back
+            gsap.to(magBtn, { x: 0, y: 0, duration: 0.5, ease: "elastic.out(1, 0.3)" });
+        });
+
+        // --- THREE.JS ---
+        const canvas = document.querySelector('#gl-canvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // --- SHADERS (UNCHANGED) ---
+        const vertexShader = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            varying vec3 vPos;
+            uniform float uTime;
+            vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+            vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+            float snoise(vec3 v) {
+                const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+                const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+                vec3 i  = floor(v + dot(v, C.yyy) );
+                vec3 x0 = v - i + dot(i, C.xxx) ;
+                vec3 g = step(x0.yzx, x0.xyz);
+                vec3 l = 1.0 - g;
+                vec3 i1 = min( g.xyz, l.zxy );
+                vec3 i2 = max( g.xyz, l.zxy );
+                vec3 x1 = x0 - i1 + C.xxx;
+                vec3 x2 = x0 - i2 + C.yyy;
+                vec3 x3 = x0 - D.yyy;
+                i = mod289(i);
+                vec4 p = permute( permute( permute( i.z + vec4(0.0, i1.z, i2.z, 1.0 )) + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+                float n_ = 0.142857142857;
+                vec3  ns = n_ * D.wyz - D.xzx;
+                vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                vec4 x_ = floor(j * ns.z);
+                vec4 y_ = floor(j - 7.0 * x_ );
+                vec4 x = x_ *ns.x + ns.yyyy;
+                vec4 y = y_ *ns.x + ns.yyyy;
+                vec4 h = 1.0 - abs(x) - abs(y);
+                vec4 b0 = vec4( x.xy, y.xy );
+                vec4 b1 = vec4( x.zw, y.zw );
+                vec4 s0 = floor(b0)*2.0 + 1.0;
+                vec4 s1 = floor(b1)*2.0 + 1.0;
+                vec4 sh = -step(h, vec4(0.0));
+                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+                vec3 p0 = vec3(a0.xy,h.x);
+                vec3 p1 = vec3(a0.zw,h.y);
+                vec3 p2 = vec3(a1.xy,h.z);
+                vec3 p3 = vec3(a1.zw,h.w);
+                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                p0 *= norm.x;
+                p1 *= norm.y;
+                p2 *= norm.z;
+                p3 *= norm.w;
+                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                m = m * m;
+                return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+            }
+            void main() {
+                vUv = uv;
+                vNormal = normal;
+                float noise1 = snoise(position * 0.8 + uTime * 0.3);
+                float noise2 = snoise(position * 2.0 + uTime * 0.8);
+                vec3 newPos = position + normal * (noise1 * 0.4 + noise2 * 0.1);
+                vPos = newPos;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPos, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            varying vec3 vPos;
+            uniform float uTime;
+            float dither4x4(vec2 position, float brightness) {
+                int x = int(mod(position.x, 4.0));
+                int y = int(mod(position.y, 4.0));
+                int index = x + y * 4;
+                float limit = 0.0;
+                if (x < 8) {
+                    if (index == 0) limit = 0.0625; if (index == 1) limit = 0.5625; if (index == 2) limit = 0.1875; if (index == 3) limit = 0.6875;
+                    if (index == 4) limit = 0.8125; if (index == 5) limit = 0.3125; if (index == 6) limit = 0.9375; if (index == 7) limit = 0.4375;
+                    if (index == 8) limit = 0.25;   if (index == 9) limit = 0.75;   if (index == 10) limit = 0.125; if (index == 11) limit = 0.625;
+                    if (index == 12) limit = 1.0;   if (index == 13) limit = 0.5;   if (index == 14) limit = 0.875; if (index == 15) limit = 0.375;
+                }
+                return brightness < limit ? 0.0 : 1.0;
+            }
+            void main() {
+                vec3 lightPos = vec3(10.0, 10.0, 10.0);
+                vec3 lightDir = normalize(lightPos - vPos);
+                float diff = max(dot(vNormal, lightDir), 0.0);
+                float rim = 1.0 - max(dot(vNormal, vec3(0,0,1)), 0.0);
+                rim = pow(rim, 2.0);
+                float brightness = diff + rim * 0.8;
+                float dither = dither4x4(gl_FragCoord.xy / 1.5, brightness);
+                vec3 colorBlack = vec3(0.02, 0.02, 0.02);
+                vec3 colorAccent = vec3(0.8, 1.0, 0.0); 
+                gl_FragColor = vec4(mix(colorBlack, colorAccent, dither), 1.0);
+            }
+        `;
+
+        const geometry = new THREE.IcosahedronGeometry(2.2, 40);
+        const material = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: { uTime: { value: 0 } }
+        });
+        const core = new THREE.Mesh(geometry, material);
+        scene.add(core);
+
+        const particlesGeom = new THREE.BufferGeometry();
+        const particlesCount = 400;
+        const posArray = new Float32Array(particlesCount * 3);
+        for(let i = 0; i < particlesCount * 3; i++) { posArray[i] = (Math.random() - 0.5) * 15; }
+        particlesGeom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMat = new THREE.PointsMaterial({ size: 0.03, color: 0xccff00, transparent: true, opacity: 0.6 });
+        const particles = new THREE.Points(particlesGeom, particlesMat);
+        scene.add(particles);
+
+        camera.position.z = 6;
+        
+        let mouseX = 0, mouseY = 0;
+        document.addEventListener('mousemove', (e) => {
+            mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const t = clock.getElapsedTime();
+            material.uniforms.uTime.value = t;
+            core.rotation.y += 0.005 + mouseX * 0.01;
+            core.rotation.x += mouseY * 0.01;
+            particles.rotation.y = t * 0.05;
+            particles.rotation.x = t * 0.02;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- SCROLL TRIGGERS ---
+        const tl = gsap.timeline();
+        
+        // Intro
+        tl.from('.corner', { y: -50, opacity: 0, duration: 1.5, stagger: 0.1, ease: "power3.out" })
+          .from('#hero-title', { y: 100, opacity: 0, duration: 1.5, ease: "power4.out" }, "-=1")
+          .from('.btn', { scale: 0.8, opacity: 0, duration: 0.5 }, "-=0.5")
+          .from(camera.position, { z: 12, duration: 3, ease: "expo.out" }, 0);
+
+        // Scroll - Fade Hero
+        gsap.to('.hero-layer', {
+            scrollTrigger: { trigger: '.hero-section', start: 'top top', end: 'bottom top', scrub: true },
+            opacity: 0, y: -50
+        });
+
+        // Scroll - Move Sphere
+        gsap.to(core.position, {
+            scrollTrigger: { trigger: '.hero-section', start: 'top top', end: 'bottom top', scrub: true },
+            z: -5, y: 2
+        });
+
+        // Scroll - Reveal Dashboard
+        gsap.to('.dashboard-content', {
+            scrollTrigger: { trigger: '.dashboard-section', start: 'center 70%' },
+            opacity: 1, y: 0, duration: 1, ease: 'power3.out'
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>

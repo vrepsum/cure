@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CURE - System Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body>
+
+  <div class="scan-line"></div>
+  <div class="vignette"></div>
+  <div class="grain"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-box">C</div>
+      <div class="brand-text">
+        <h1>CURE [SYS.V4]</h1>
+        <p class="subtitle">Global Diagnostic Network</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="search-wrapper">
+        <span class="input-prefix">>></span>
+        <input id="searchBar" placeholder="SEARCH SECTOR..." class="search" autocomplete="off" />
+        <div id="searchSuggestions" class="search-suggestions"></div>
+      </div>
+      
+      <select id="cityDropdown" class="dropdown"></select>
+      
+      <button id="currentLocBtn" class="btn-tech">
+        <i class="fas fa-crosshairs"></i> LOCATE
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section id="map" class="map"></section>
+
+    <aside class="sidebar">
+      <div class="panel-header">/// DATA STREAM ///</div>
+      
+      <div class="card" id="weatherCard">
+        <h3><i class="fas fa-temperature-high"></i> ATMOSPHERICS</h3>
+        <div id="weatherInfo" class="mono-text">Awaiting Input...</div>
+      </div>
+
+      <div class="card" id="predCard">
+        <h3><i class="fas fa-biohazard"></i> RISK VECTORS (7-DAY)</h3>
+        <div id="diseaseTimeline" class="mono-text">System Standby</div>
+      </div>
+
+      <div class="action-area">
+        <button id="reportBtn" class="btn-report">
+          <span class="btn-text">REPORT ANOMALY</span>
+          <div class="btn-fill"></div>
+        </button>
+        
+        <a href="index.html" class="btn-exit">
+          &lt; TERMINATE SESSION
+        </a>
+      </div>
+    </aside>
+  </main>
+
+  <div id="reportModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>/// SUBMIT BIO-DATA ///</h2>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div id="reportMessage" class="alert-box" style="display:none"></div>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="reportDisease">PATHOGEN TYPE:</label>
+            <select id="reportDisease">
+              <option value="">-- SELECT --</option>
+              <option value="Malaria">MALARIA</option>
+              <option value="Dengue">DENGUE</option>
+              <option value="Typhoid">TYPHOID</option>
+              <option value="Cholera">CHOLERA</option>
+              <option value="COVID-19">COVID-19</option>
+              <option value="Influenza">INFLUENZA</option>
+              <option value="Measles">MEASLES</option>
+              <option value="Tuberculosis">TUBERCULOSIS</option>
+              <option value="Other">OTHER</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="otherDiseaseGroup" style="display:none">
+            <label for="otherDisease">SPECIFY NAME:</label>
+            <input type="text" id="otherDisease" placeholder="INPUT NAME..." />
+          </div>
+
+          <div class="form-group">
+            <label for="reportSeverity">SEVERITY LEVEL:</label>
+            <select id="reportSeverity">
+              <option value="">-- SELECT --</option>
+              <option value="Mild">CLASS 1 (MILD)</option>
+              <option value="Moderate">CLASS 2 (MODERATE)</option>
+              <option value="Severe">CLASS 3 (CRITICAL)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reportSymptoms">SYMPTOM LOG:</label>
+          <textarea id="reportSymptoms" placeholder="ENTER OBSERVATIONS..." rows="3"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="reportLocation">COORDINATES:</label>
+          <input type="text" id="reportLocation" readonly class="readonly-input" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="reportCancel" class="btn-secondary">CANCEL</button>
+        <button id="reportSubmit" class="btn-primary">UPLOAD DATA</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5orDJP5PbJNVIumMR20sojspANE_L6Xo&libraries=places&callback=initAutocomplete"
+    async defer>
+  </script>
+</body>
+</html>
